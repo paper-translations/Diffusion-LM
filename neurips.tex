@@ -129,7 +129,7 @@
 \usepackage{microtype}
 
 
-\title{Diffusion-LM Improves Controllable Text Generation}
+\title{Diffusion-LM 改进可控文本生成}
 
 
 \author{%
@@ -168,77 +168,77 @@
 
 
 \begin{abstract}
-Controlling the behavior of language models (LMs) without re-training is a major open problem in natural language generation. While recent works have demonstrated successes on controlling simple sentence attributes (e.g., sentiment), there has been little progress on complex, fine-grained controls (e.g., syntactic structure).
-To address this challenge, we develop a new \emph{non-autoregressive} language model based on \emph{continuous} diffusions that we call Diffusion-LM. 
-Building upon the recent successes of diffusion models in continuous domains, Diffusion-LM iteratively denoises a sequence of Gaussian vectors into word vectors, yielding a sequence of intermediate latent variables.
-The continuous, hierarchical nature of these intermediate variables enables a simple gradient-based algorithm to perform complex, controllable generation tasks.
-We demonstrate successful control of Diffusion-LM for six challenging fine-grained control tasks, significantly outperforming prior work.\footnote{Code is available at \url{https://github.com/XiangLi1999/Diffusion-LM.git} }
+在不重新训练的情况下控制语言模型（LM）的行为，是自然语言生成中的一个重要开放问题。尽管近期工作已经展示了对简单句子属性（例如情感）进行控制的成功，但在复杂、细粒度控制（例如句法结构）方面进展甚微。
+为应对这一挑战，我们开发了一种基于\emph{连续}扩散的新的\emph{非自回归}语言模型，称为 Diffusion-LM。
+基于扩散模型在连续域中的近期成功，Diffusion-LM 迭代地将一系列 Gaussian 向量去噪为词向量，从而产生一系列中间隐变量。
+这些中间变量的连续、层次化性质，使一种简单的基于梯度的算法能够执行复杂的可控生成任务。
+我们在六个具有挑战性的细粒度控制任务上展示了对 Diffusion-LM 的成功控制，并显著优于先前工作。\footnote{代码可在 \url{https://github.com/XiangLi1999/Diffusion-LM.git} 获取。}
 \end{abstract}
 
-\section{Introduction}
+\section{引言}
 \label{sec:intro}
 
-Large autoregressive language models (LMs) are capable of generating high quality text \cite{radford2019language,brown-et-al-gpt3,Chowdhery2022PaLMSL,Zhang2022OPT}, but in order to reliably deploy these LMs in real world applications, the text generation process needs to be \emph{controllable}: we need to generate text that satisfies desired requirements (e.g. topic, syntactic structure). 
-A natural approach for controlling a LM would be to fine-tune the LM using supervised data of the form (control, text)
-\cite{Keskar2019CTRL}. However, updating the LM parameters for each control task can be expensive and does not allow for compositions of multiple controls (e.g. generate text that is both positive sentiment \emph{and} non-toxic).
-This motivates light-weight and modular plug-and-play approaches \cite{Dathathri2020Plug} that keep the LM frozen and steer the generation process using an external classifier that measures how well the generated text satisfies the control.  
-But steering a frozen autoregressive LM has been shown to be difficult, and existing successes have been limited to
-simple, attribute-level controls (e.g., sentiment or topic) \cite{Dathathri2020Plug,KrauseGeDi2020,yang-klein-2021-fudge}.
+大型自回归语言模型（LM）能够生成高质量文本 \cite{radford2019language,brown-et-al-gpt3,Chowdhery2022PaLMSL,Zhang2022OPT}，但为了在真实世界应用中可靠地部署这些 LM，文本生成过程需要是\emph{可控的}：我们需要生成满足期望要求（例如主题、句法结构）的文本。
+控制 LM 的一种自然方法，是使用 (control, text) 形式的监督数据对 LM 进行微调
+\cite{Keskar2019CTRL}。然而，为每个控制任务更新 LM 参数可能代价高昂，并且不允许组合多个控制（例如生成既具有正向情感\emph{又}无毒的文本）。
+这促使人们采用轻量且模块化的 plug-and-play 方法 \cite{Dathathri2020Plug}：保持 LM 冻结，并使用外部分类器引导生成过程，该分类器衡量生成文本满足控制的程度。
+但是，引导冻结的自回归 LM 已被证明是困难的，而已有成功仅限于
+简单的属性级控制（例如情感或主题）\cite{Dathathri2020Plug,KrauseGeDi2020,yang-klein-2021-fudge}。
 
-In order to tackle more complex controls,
-we propose \emph{Diffusion-LM}, a new language model based on \emph{continuous} diffusions. 
-Diffusion-LM starts with a sequence of Gaussian noise vectors and incrementally denoises them into vectors corresponding to words, as shown in \cref{fig:1}.
-These gradual denoising steps produce a hierarchy of continuous latent representations.
-We find that this hierarchical and continuous latent variable enables simple, gradient-based methods to perform complex control tasks such as constraining the parse tree of a generated sequence.
+为处理更复杂的控制，
+我们提出\emph{Diffusion-LM}，一种基于\emph{连续}扩散的新的语言模型。
+如 \cref{fig:1} 所示，Diffusion-LM 从一系列 Gaussian 噪声向量开始，并逐步将其去噪为与词对应的向量。
+这些渐进去噪步骤产生了连续隐表征的层次结构。
+我们发现，这种层次化且连续的隐变量使简单的基于梯度的方法能够执行复杂控制任务，例如约束生成序列的解析树。
 
 
 
 \begin{figure}
     \centering
     \includegraphics[width=0.8\textwidth]{fig/fig1_v2.pdf}
-     \caption{\label{fig:1} Diffusion-LM iteratively denoises a sequence of Gaussian vectors into word vectors, yielding a intermediate latent variables of decreasing noise level $\cx{T} \cdots \cx{0}$. For controllable generation, we iteratively perform gradient updates on these continuous latents to optimize for fluency (parametrized by Diffusion-LM) and satisfy control requirements (parametrized by a classifier). 
+     \caption{\label{fig:1} Diffusion-LM 迭代地将一系列 Gaussian 向量去噪为词向量，产生噪声水平递减的中间隐变量 $\cx{T} \cdots \cx{0}$。对于可控生成，我们在这些连续隐变量上迭代执行梯度更新，以优化流畅性（由 Diffusion-LM 参数化）并满足控制要求（由分类器参数化）。
      \vspace{-5mm}
     }
 \end{figure}
 
 
-Continuous diffusion models have been extremely successful in vision and audio domains \cite{ho2020denoising,kong2020diffwave,ramesh2022hierarchical,dhariwal2021diffusion,chen2021wavegrad}, but they have not been applied to text because of the inherently discrete nature of text (\cref{sec:background}). Adapting this class of models to text requires several modifications to standard diffusions: we add an embedding step and a rounding step to the standard diffusion process, design a training objective to learn the embedding, and propose techniques to improve rounding (\cref{sec:method}).  
-We control Diffusion-LM using a gradient-based method, as shown in \cref{fig:1}. This method enables us to steer the text generation process towards outputs that satisfy target structural and semantic controls. It iteratively performs gradient updates on the continuous latent variables of Diffusion-LM to balance fluency and control satisfaction (\cref{ssec:control_text}).%
+连续扩散模型在视觉和音频领域取得了极大成功 \cite{ho2020denoising,kong2020diffwave,ramesh2022hierarchical,dhariwal2021diffusion,chen2021wavegrad}，但由于文本固有的离散性质，它们尚未应用于文本（\cref{sec:background}）。将这类模型适配到文本需要对标准扩散进行若干修改：我们向标准扩散过程添加 embedding 步骤和 rounding 步骤，设计训练目标来学习 embedding，并提出改进 rounding 的技术（\cref{sec:method}）。
+如 \cref{fig:1} 所示，我们使用基于梯度的方法控制 Diffusion-LM。该方法使我们能够将文本生成过程引导到满足目标结构和语义控制的输出。它在 Diffusion-LM 的连续隐变量上迭代执行梯度更新，以平衡流畅性与控制满足度（\cref{ssec:control_text}）。%
 
-To demonstrate control of Diffusion-LM, we consider six control targets ranging from fine-grained attributes (e.g., semantic content) to complex structures (e.g., parse trees). 
-Our method almost doubles the success rate of previous plug-and-play methods and matches or outperforms the fine-tuning oracle on all these classifier-guided control tasks (\cref{ssec:control}). 
-In addition to these individual control tasks, we show that we can successfully compose multiple classifier-guided controls to generate sentences with both desired semantic content and syntactic structure (\cref{ssec:compose}). 
-Finally, we consider span-anchored controls, such as length control and infilling. Diffusion-LM allows us to perform these control tasks \emph{without} a classifier, and our Diffusion-LM significantly outperforms prior plug-and-play methods and is on-par with an autoregressive LM trained from scratch for the infilling task (\cref{ssec:infill}).
+为展示 Diffusion-LM 的可控性，我们考虑六个控制目标，范围从细粒度属性（例如语义内容）到复杂结构（例如解析树）。
+在所有这些分类器引导的控制任务上，我们的方法几乎将先前 plug-and-play 方法的成功率翻倍，并达到或优于微调 oracle（\cref{ssec:control}）。
+除了这些单独的控制任务外，我们还表明，可以成功组合多个分类器引导的控制，生成同时具有期望语义内容和句法结构的句子（\cref{ssec:compose}）。
+最后，我们考虑 span-anchored 控制，例如长度控制和 infilling。Diffusion-LM 允许我们\emph{无需}分类器即可执行这些控制任务，并且我们的 Diffusion-LM 显著优于先前 plug-and-play 方法，在 infilling 任务上与从头训练的自回归 LM 相当（\cref{ssec:infill}）。
 
-\section{Related Work}
+\section{相关工作}
 \label{sec:related_work}
 
 
-\paragraph{Diffusion Models for Text.}
-Diffusion models \cite{pmlr-v37-sohl-dickstein15} have demonstrated great success in continuous data domains \cite{ho2020denoising,nichol2021improved, kong2020diffwave, Mittal2021Music}, producing images and audio that have state-of-the-art sample quality. To handle discrete data, past works have studied text diffusion models on \emph{discrete} state spaces, which defines a corruption process on discrete data (e.g., each token has some probability to be corrupted to an absorbing or random token)  \cite{austin2021structured,hoogeboom2021argmax,hoogeboom2022autoregressive}.
-In this paper, we focus on \emph{continuous} diffusion models for text and to the best of our knowledge, our work is the first to explore this setting. 
-In contrast to discrete diffusion LMs, our continuous diffusion LMs induce continuous latent representations, which enables efficient gradient-based methods for controllable generation.
+\paragraph{文本扩散模型。}
+扩散模型 \cite{pmlr-v37-sohl-dickstein15} 已在连续数据域中展示出巨大成功 \cite{ho2020denoising,nichol2021improved, kong2020diffwave, Mittal2021Music}，能够生成具有 state-of-the-art 样本质量的图像和音频。为处理离散数据，过去工作研究了\emph{离散}状态空间上的文本扩散模型，在离散数据上定义加噪过程（例如，每个 token 有一定概率被加噪为吸收或随机 token）\cite{austin2021structured,hoogeboom2021argmax,hoogeboom2022autoregressive}。
+本文聚焦于文本的\emph{连续}扩散模型；据我们所知，我们的工作是首个探索这一设定的工作。
+与离散扩散 LM 相比，我们的连续扩散 LM 诱导连续隐表征，使高效的基于梯度的方法能够用于可控生成。
 
-\paragraph{Autoregressive and Non-autoregressive LMs.}
-Most large pre-trained LMs are left-to-right autoregressive (e.g., GPT-3 \cite{brown-et-al-gpt3}, PaLM \cite{Chowdhery2022PaLMSL}). The fixed generation order limits the models' flexibility in many controllable generation settings, especially those that 
-impose controls globally on both left and right contexts. One example is infilling, which imposes lexical control on the right contexts; another example is syntactic structure control, which controls global properties involving both left and right contexts.  
-Since autoregressive LMs cannot directly condition on right contexts, prior works have developed specialized training and decoding techniques for these tasks \cite{sha-2020-gradient,donahue-etal-2020-enabling,qin-etal-2020-back}.
-For example, \citet{Qin-COLD} proposed a decoding method that relaxes the discrete LM outputs to continuous variables and backpropagates gradient information from the right context.
-Diffusion-LM can condition on arbitrary classifiers that look at complex, global properties of the sentence. 
-There are other non-autoregressive LMs that have been developed for machine translation and speech-to-text tasks \cite{gu2018nonautoregressive,saharia2020latentalignments}.
-However these methods are specialized for speech and translation settings, where the entropy over valid outputs is low,
-and it has been shown that these approaches fail for language modeling \cite{ren-etal-2020-study}. 
+\paragraph{自回归与非自回归 LM。}
+大多数大型预训练 LM 都是从左到右的自回归模型（例如 GPT-3 \cite{brown-et-al-gpt3}、PaLM \cite{Chowdhery2022PaLMSL}）。固定的生成顺序限制了模型在许多可控生成设定中的灵活性，尤其是那些
+对左右上下文全局施加控制的设定。一个例子是 infilling，它对右上下文施加词汇控制；另一个例子是句法结构控制，它控制涉及左右上下文的全局属性。
+由于自回归 LM 不能直接以右上下文为条件，先前工作为这些任务开发了专门的训练和解码技术 \cite{sha-2020-gradient,donahue-etal-2020-enabling,qin-etal-2020-back}。
+例如，\citet{Qin-COLD} 提出了一种解码方法，将离散 LM 输出松弛为连续变量，并从右上下文反向传播梯度信息。
+Diffusion-LM 可以以任意分类器为条件，这些分类器可考察句子的复杂全局属性。
+也有其他非自回归 LM 被开发用于机器翻译和 speech-to-text 任务 \cite{gu2018nonautoregressive,saharia2020latentalignments}。
+然而，这些方法专门面向语音和翻译设定，其中有效输出上的熵较低，
+并且已有研究表明这些方法在语言建模上失败 \cite{ren-etal-2020-study}。
 
-\paragraph{Plug-and-Play Controllable Generation.}
-Plug-and-play controllable generation aims to keep the LM frozen and steer its output using potential functions (e.g., classifiers). Given a probabilistic potential function that measures how well the generated text satisfies the desired control, the generated text should be optimized for both control satisfaction (measured by the potential function) and fluency (measured by LM probabilities) .  
-There are several plug-and-play approaches based on autoregressive LMs: 
-FUDGE \cite{yang-klein-2021-fudge} reweights the LM prediction at each token with an estimate of control satisfaction for the partial sequence;
-GeDi \cite{KrauseGeDi2020} and DExperts \cite{liu-etal-2021-dexperts} reweight the LM prediction at each token with a smaller LM finetuned/trained for the control task. 
+\paragraph{Plug-and-Play 可控生成。}
+Plug-and-play 可控生成旨在保持 LM 冻结，并使用势函数（例如分类器）引导其输出。给定一个衡量生成文本满足期望控制程度的概率势函数，生成文本应同时针对控制满足度（由势函数衡量）和流畅性（由 LM 概率衡量）进行优化。
+有若干基于自回归 LM 的 plug-and-play 方法：
+FUDGE \cite{yang-klein-2021-fudge} 用部分序列控制满足度的估计，对每个 token 处的 LM 预测重新加权；
+GeDi \cite{KrauseGeDi2020} 和 DExperts \cite{liu-etal-2021-dexperts} 使用为控制任务微调/训练的较小 LM，对每个 token 处的 LM 预测重新加权。
 
 
-The closest work to ours is PPLM \cite{Dathathri2020Plug}, which runs gradient ascent on an autoregressive LM's hidden activations to steer the next token to satisfy the control and maintain fluency. 
-Because PPLM is based on autoregressive LMs, it can only generate left-to-right. This prevents PPLM from repairing and recovering errors made in previous generation steps.
-Despite their success on attribute (e.g., topic) controls, we will show these plug-and-play methods for autoregressive LMs fail on more complex control tasks such as controlling syntactic structure and semantic content in \cref{ssec:control}. We demonstrate that Diffusion-LM is capable of plug-and-play controllable generation by applying classifier-guided gradient updates to the continuous sequence of latent variables induced by the Diffusion-LM. 
+与我们最接近的工作是 PPLM \cite{Dathathri2020Plug}，它在自回归 LM 的隐藏激活上执行梯度上升，以引导 next-token 满足控制并保持流畅性。
+由于 PPLM 基于自回归 LM，它只能从左到右生成。这阻止了 PPLM 修复和恢复先前生成步骤中产生的错误。
+尽管这些方法在属性（例如主题）控制上取得成功，但我们将在 \cref{ssec:control} 中表明，这些用于自回归 LM 的 plug-and-play 方法在更复杂的控制任务上会失败，例如控制句法结构和语义内容。我们通过对 Diffusion-LM 诱导的连续隐变量序列应用分类器引导的梯度更新，证明 Diffusion-LM 能够进行 plug-and-play 可控生成。
 
 
 
@@ -250,22 +250,22 @@ Despite their success on attribute (e.g., topic) controls, we will show these pl
 \newcommand{\Syntax}{Syntax Tree\xspace} 
 \newcommand{\Content}{Semantic Content\xspace} 
 
-\section{Experimental Setup}
-With the above improvements on training (\cref{sec:method}) and decoding (\cref{sec:decode}), we train Diffusion-LM for two language modeling tasks. We then apply the controllable generation method to $5$ classifier-guided control tasks, and apply MBR decoding to a classifier-free control task (i.e. infilling). 
+\section{实验设置}
+通过上述对训练（\cref{sec:method}）和解码（\cref{sec:decode}）的改进，我们为两个语言建模任务训练 Diffusion-LM。随后，我们将可控生成方法应用于 $5$ 个分类器引导的控制任务，并将 MBR 解码应用于一个无分类器控制任务（即 infilling）。
 
 \label{sec:setup}
-\subsection{Datasets and Hyperparameters} 
-We train Diffusion-LM on two datasets: E2E  \cite{novikova-etal-2017-e2e} and ROCStories \cite{mostafazadeh-etal-2016-corpus}. The E2E dataset consists of 50K restaurant reviews labeled by 8 fields including food type, price, and customer rating.
-The ROCStories dataset consists of 98K five-sentence stories, 
-capturing a rich set of causal and temporal commonsense relations between daily events. 
-This dataset is more challenging to model than E2E, because the stories contain a larger vocabulary of 11K words and more diverse semantic content. 
+\subsection{数据集与超参数} 
+我们在两个数据集上训练 Diffusion-LM：E2E \cite{novikova-etal-2017-e2e} 和 ROCStories \cite{mostafazadeh-etal-2016-corpus}。E2E 数据集包含 50K 条餐馆评论，这些评论由 8 个字段标注，包括食物类型、价格和顾客评分。
+ROCStories 数据集包含 98K 个五句故事，
+捕获了日常事件之间丰富的因果和时间常识关系。
+该数据集比 E2E 更难建模，因为故事包含更大的 11K 词词表和更丰富的语义内容。
 
 
-Our Diffusion-LM is based on Transformer \cite{Vaswani2017Attn} architecture with $80$M parameters, with a sequence length $n=64$, diffusion steps $T=2000$ and a square-root noise schedule (see \cref{app:noise} for details). We treat the embedding dimension as a hyperparameter, setting $d=16$ for E2E and $d=128$ for ROCStories. See \cref{app:hyperparam} for hyperparameter details.
-At decoding time, we downsample to 200 diffusion steps for E2E and maintain 2000 steps for ROCStories. Decoding Diffusion-LM for 200 steps is still 7x slower than decoding autoregressive LMs. For controllable generation, our method based on Diffusion-LM is 1.5x slower than FUDGE but 60x faster than PPLM. 
+我们的 Diffusion-LM 基于具有 $80$M 参数的 Transformer \cite{Vaswani2017Attn} 架构，序列长度为 $n=64$，扩散步骤为 $T=2000$，并采用平方根噪声调度（详见 \cref{app:noise}）。我们将 embedding 维度视为超参数，对 E2E 设为 $d=16$，对 ROCStories 设为 $d=128$。超参数细节见 \cref{app:hyperparam}。
+在解码时，我们对 E2E 下采样到 200 个扩散步骤，对 ROCStories 保持 2000 个步骤。使用 200 步解码 Diffusion-LM 仍比解码自回归 LM 慢 7 倍。对于可控生成，我们基于 Diffusion-LM 的方法比 FUDGE 慢 1.5 倍，但比 PPLM 快 60 倍。
 
 
-\subsection{Control tasks}
+\subsection{控制任务}
 \label{ssec:control_gen_setup}
 
 \begin{table*}
@@ -293,59 +293,56 @@ input (right context)  & My dog had stolen every one and put it under there.\\
 output text & One day, I found all of my lost tennis balls underneath the bed. \\
 \bottomrule
 \end{tabular}}
-\caption{\label{app:example} Example input control and output text for each control tasks.}
+\caption{\label{app:example} 每个控制任务的输入控制与输出文本示例。}
 \end{table*}
 
-We consider $6$ control tasks shown in \cref{app:example}:  the first 4 tasks rely on a classifier, and the last 2 tasks are classifier free\footnote{Length is classifier-free for our Diffusion-LM based methods, but other methods still require a classifier.}. 
-For each control task (e.g. semantic content), we sample $200$ control targets $\cc$ (e.g., rating=5 star) from the validation splits, and we generate $50$ samples for each control target.
-To evaluate the fluency of the generated text, we follow the prior works \cite{yang-klein-2021-fudge, Dathathri2020Plug} and feed the generated text to a teacher LM (i.e., a carefully fine-tuned GPT-2 model) and report the perplexity of generated text under the teacher LM. We call this metric lm-score (denoted as lm): a lower lm-score indicates better sample quality. \footnote{Prior works \cite{yang-klein-2021-fudge, Dathathri2020Plug} use GPT \cite{Radford2018ImprovingLU} as the teacher LM whereas we use a  fine-tuned GPT-2 model because our base autoregressive LM and Diffusion-LM both generate UNK tokens, which does not exist in pretrained vocabularies of GPT. }
-We define success metrics for each control task as follows: 
+我们考虑 \cref{app:example} 所示的 $6$ 个控制任务：前 4 个任务依赖分类器，最后 2 个任务不使用分类器\footnote{对于我们基于 Diffusion-LM 的方法，长度是无分类器的，但其他方法仍需要分类器。}。
+对于每个控制任务（例如语义内容），我们从验证划分中采样 $200$ 个控制目标 $\cc$（例如 rating=5 star），并为每个控制目标生成 $50$ 个样本。
+为评估生成文本的流畅性，我们遵循先前工作 \cite{yang-klein-2021-fudge, Dathathri2020Plug}，将生成文本输入教师 LM（即一个仔细微调的 GPT-2 模型），并报告生成文本在教师 LM 下的困惑度。我们将该指标称为 lm-score（记为 lm）：较低的 lm-score 表示更好的样本质量。\footnote{先前工作 \cite{yang-klein-2021-fudge, Dathathri2020Plug} 使用 GPT \cite{Radford2018ImprovingLU} 作为教师 LM，而我们使用微调的 GPT-2 模型，因为我们的基础自回归 LM 和 Diffusion-LM 都会生成 UNK token，而 GPT 的预训练词表中不存在该 token。}
+我们如下定义每个控制任务的成功指标：
 
-\textbf{\Content.} Given a field (e.g., rating) and value (e.g., 5 star), generate a sentence that covers field=value, and report the success rate by exact match of `value'.
-
-
+\textbf{\Content.} 给定一个字段（例如 rating）和值（例如 5 star），生成覆盖 field=value 的句子，并通过 `value' 的精确匹配报告成功率。
 
 
-\textbf{\POS.} Given a sequence of parts-of-speech (POS) tags (e.g., \textit{Pronoun Verb Determiner Noun}), generate a sequence of words of the same length whose POS tags (under an oracle POS tagger) match the target (e.g., \textit{I ate an apple}). We quantify success via word-level exact match.
 
 
-\textbf{\Syntax.} Given a target syntactic parse tree (see \cref{fig:1}),  generate text whose syntactic parse matches the given parse. To evaluate the success, we parse the generated text by an off-the-shelf parser \cite{kitaev-klein-2018-constituency}, and report F1 scores.  
+\textbf{\POS.} 给定一个 parts-of-speech (POS) 标签序列（例如 \textit{Pronoun Verb Determiner Noun}），生成一个相同长度的词序列，使其 POS 标签（由 oracle POS 标注器给出）匹配目标（例如 \textit{I ate an apple}）。我们通过词级精确匹配量化成功率。
+
+
+\textbf{\Syntax.} 给定目标句法解析树（见 \cref{fig:1}），生成句法解析与给定解析匹配的文本。为评估成功率，我们使用 off-the-shelf 解析器 \cite{kitaev-klein-2018-constituency} 解析生成文本，并报告 F1 分数。
 
 
 \textbf{\Spans.} %
-Given a target (span, syntactic category) pair,  generate text whose parse tree over span $[i,j]$ matches the target syntactic category (e.g. prepositional phrase).We quantify success via the fraction of spans that match exactly.
+给定目标 (span, syntactic category) 对，生成文本，使其在 span $[i,j]$ 上的解析树匹配目标句法类别（例如 prepositional phrase）。我们通过精确匹配的 span 比例量化成功率。
 
 
-\textbf{\Length.} Given a target length $10, \dots, 40$, generate a sequence with a length within $\pm 2$ of the target. In the case of Diffusion-LM, we treat this as a classifier-free control task. 
+\textbf{\Length.} 给定目标长度 $10, \dots, 40$，生成长度在目标 $\pm 2$ 范围内的序列。对于 Diffusion-LM，我们将其视为无分类器控制任务。
 
-\textbf{Infilling.} Given a left context ($O_1$) and a right context ($O_2$) from the aNLG dataset \cite{bhagavatula2020abductive}, and the goal is to generate a sentence that logically connects $O_1$ and $O_2$. For evaluation, we report both automatic and human evaluation from the Genie leaderboard \cite{Khashabi2021GENIEAL}.
-
-
-\subsection{Classifier-Guided Control Baselines}
-
-For the first 5 control tasks, we compare our method with PPLM, FUDGE, and a fine-tuning oracle. Both PPLM and FUDGE are plug-and-play controllable generation approaches based on an autoregressive LM, which we train from scratch using the GPT-2 small architecture \cite{radford2019language}.
+\textbf{Infilling.} 给定来自 aNLG 数据集 \cite{bhagavatula2020abductive} 的左上下文 ($O_1$) 和右上下文 ($O_2$)，目标是生成一个逻辑上连接 $O_1$ 和 $O_2$ 的句子。对于评估，我们报告来自 Genie leaderboard \cite{Khashabi2021GENIEAL} 的自动评估和人工评估。
 
 
-\textbf{PPLM\cite{Dathathri2020Plug}.}  This method runs gradient ascent on the LM activations to increase the classifier probabilities and language model probabilities, and has been successful on simple attribute control. We apply PPLM to control semantic content, but not the remaining 4 tasks which require positional information, as PPLM's classifier lacks positional information.
+\subsection{分类器引导控制基线}
 
-\textbf{FUDGE\cite{yang-klein-2021-fudge}.} For each control task, FUDGE requires a future discriminator that takes in a prefix sequence and predicts whether the complete sequence would satisfy the constraint. At decoding time, FUDGE reweights the LM prediction by the discriminator scores.
-
-\textbf{FT.} For each control task, we fine-tune GPT-2 on (control, text) pair, yielding an \emph{oracle} conditional language model that's not plug-and-play. 
-We report both the sampling (with temperature 1.0) and beam search (with beam size 4) outputs of the fine-tuned models, denoted as FT-sample and FT-search. 
-
-\subsection{Infilling Baselines}
-
-We compare to 3 specialized baseline methods developed in past work for the infilling task.
-
-\textbf{DELOREAN \cite{qin-etal-2020-back}.} This method continuously relaxes the output space of a left-to-right autoregressive LM, and iteratively performs gradient updates on the continuous space to enforce fluent connection to the right contexts. This yields a continuous vector which is rounded back to text.
-
-\textbf{COLD\cite{Qin-COLD}.} COLD specifies an energy-based model that includes fluency (from left-to-right and right-to-left LM) and coherence constraints (from lexical overlap). It samples continuous vectors from this energy-based model and round them to text. 
+对于前 5 个控制任务，我们将我们的方法与 PPLM、FUDGE 和微调 oracle 进行比较。PPLM 和 FUDGE 都是基于自回归 LM 的 plug-and-play 可控生成方法，我们使用 GPT-2 small 架构 \cite{radford2019language} 从头训练该自回归 LM。
 
 
-\textbf{AR-infilling.} We train an autoregressive LM from scratch to do sentence infilling task \cite{donahue-etal-2020-enabling}. Similar to training Diffusion-LM, we train on the ROCStories dataset, but pre-process it by reordering sentences from $(O_1, O_\text{middle} , O_2)$ to $(O_1, O_2, O_\text{middle})$. At evaluation time, we feed in $O_1, O_2$, and the model generates the middle sentence.
+\textbf{PPLM\cite{Dathathri2020Plug}.} 该方法在 LM 激活上执行梯度上升，以提高分类器概率和语言模型概率，并已在简单属性控制上取得成功。我们将 PPLM 应用于语义内容控制，但不应用于其余 4 个需要位置信息的任务，因为 PPLM 的分类器缺少位置信息。
+
+\textbf{FUDGE\cite{yang-klein-2021-fudge}.} 对于每个控制任务，FUDGE 需要一个 future discriminator，它接收前缀序列并预测完整序列是否会满足约束。在解码时，FUDGE 根据判别器分数对 LM 预测重新加权。
+
+\textbf{FT.} 对于每个控制任务，我们在 (control, text) 对上微调 GPT-2，得到一个非 plug-and-play 的\emph{oracle} 条件语言模型。
+我们报告微调模型的采样（温度为 1.0）和 beam search（beam size 为 4）输出，分别记为 FT-sample 和 FT-search。
+
+\subsection{Infilling 基线}
+
+我们与过去工作中为 infilling 任务开发的 3 种专门基线方法进行比较。
+
+\textbf{DELOREAN \cite{qin-etal-2020-back}.} 该方法连续松弛从左到右自回归 LM 的输出空间，并在连续空间上迭代执行梯度更新，以强制与右上下文流畅连接。这产生一个连续向量，随后被 rounding 回文本。
+
+\textbf{COLD\cite{Qin-COLD}.} COLD 指定一个 energy-based 模型，其中包含流畅性（来自从左到右和从右到左的 LM）以及连贯性约束（来自词汇重叠）。它从该 energy-based 模型中采样连续向量并将其 rounding 为文本。
 
 
-
+\textbf{AR-infilling.} 我们从头训练一个自回归 LM 来执行句子 infilling 任务 \cite{donahue-etal-2020-enabling}。与训练 Diffusion-LM 类似，我们在 ROCStories 数据集上训练，但通过将句子从 $(O_1, O_\text{middle} , O_2)$ 重排为 $(O_1, O_2, O_\text{middle})$ 进行预处理。在评估时，我们输入 $O_1, O_2$，模型生成中间句。
 
 
 
@@ -353,18 +350,21 @@ We compare to 3 specialized baseline methods developed in past work for the infi
 
 
 
-\section{Main Results}
-We train Diffusion-LMs on the E2E and ROCStories datasets.
-In terms of negative log-likelihood (NLL, lower is better), we find that the variational upper bound of Diffusion-LM NLL \footnote{Exact log-likelihoods are intractable for Diffusion-LM, so we report the lower bound $\mathcal{L}^\text{e2e}_{\text{vlb}}$.} underperforms the equivalent autoregressive Transformer model (2.28 vs. 1.77 for E2E, 3.88 vs 3.05 for ROCStories) although scaling up model and dataset size partially bridges the gap (3.88 $\xrightarrow{}$ 3.10 on ROCStories).
-Our best log-likelihoods required several modifications from \cref{sec:method}; we explain these and give detailed log-likelihood results in \cref{app:simplex}.
-Despite worse likelihoods, controllable generation based on our Diffusion-LM results in significantly better outputs than systems based on autoregressive LMs, as we will show in \cref{ssec:control},\cref{ssec:compose}, and \cref{ssec:infill}
+
+
+
+\section{主要结果}
+我们在 E2E 和 ROCStories 数据集上训练 Diffusion-LM。
+就负对数似然（NLL，越低越好）而言，我们发现 Diffusion-LM NLL 的变分上界\footnote{Diffusion-LM 的精确对数似然不可处理，因此我们报告下界 $\mathcal{L}^\text{e2e}_{\text{vlb}}$。} 不如等价的自回归 Transformer 模型（E2E 上 2.28 vs. 1.77，ROCStories 上 3.88 vs 3.05），尽管扩大模型和数据集规模可以部分缩小差距（ROCStories 上 3.88 $\xrightarrow{}$ 3.10）。
+我们最好的对数似然需要对 \cref{sec:method} 进行若干修改；我们在 \cref{app:simplex} 中解释这些修改并给出详细的对数似然结果。
+尽管似然更差，但基于我们 Diffusion-LM 的可控生成得到的输出显著优于基于自回归 LM 的系统，如我们将在 \cref{ssec:control},\cref{ssec:compose} 和 \cref{ssec:infill} 中展示的那样
 
 \newcommand{\fluency}{lm $\downarrow$}
 \newcommand{\success}{ctrl $\uparrow$}
 
 
 
-\subsection{Classifier-Guided Controllable Text Generation Results}
+\subsection{分类器引导的可控文本生成结果}
 \label{ssec:control}
 \begin{table*}
 \centering
@@ -382,23 +382,23 @@ FT-search  & 89.9  & 1.78  & 93.0 & 3.31    & 76.4   & 3.24 & 54.4 & 2.19  & 100
 \bottomrule
 \end{tabular}
 }
-\caption{\label{tab:control} Diffusion-LM achieves high success rate (\success) and good fluency (\fluency) across all 5 control tasks, outperforming the PPLM and FUDGE baselines. Our method even outperforms the fine-tuning oracle (FT) on controlling syntactic parse trees and spans.}
+\caption{\label{tab:control} Diffusion-LM 在全部 5 个控制任务上取得高成功率（\success）和良好流畅性（\fluency），优于 PPLM 和 FUDGE 基线。我们的方法在控制句法解析树和 spans 方面甚至优于微调 oracle（FT）。}
 \end{table*}
-As shown in \cref{tab:control}, Diffusion-LM achieves high success and fluency across all classifier-guided control tasks. It significantly outperforms the PPLM and FUDGE baselines across all 5 tasks. Surprisingly, our method outperforms the fine-tuning oracle on controlling syntactic parse trees and spans, while achieving similar performance on the remaining 3 tasks.  
+如 \cref{tab:control} 所示，Diffusion-LM 在所有分类器引导的控制任务上都取得了较高的成功率和流畅性。它在全部 5 个任务上显著优于 PPLM 和 FUDGE 基线。令人惊讶的是，我们的方法在控制句法解析树和 spans 上优于微调 oracle，同时在其余 3 个任务上取得相近性能。
 
-Controlling syntactic parse trees and spans are challenging tasks for fine-tuning, because conditioning on the parse tree requires reasoning about the nested structure of the parse tree, and conditioning on spans requires lookahead planning to ensure the right constituent appears at the target position.
+控制句法解析树和 spans 对微调而言是具有挑战性的任务，因为以解析树为条件需要推理解析树的嵌套结构，而以 spans 为条件需要前瞻规划，以确保正确成分出现在目标位置。
 
-We observe that PPLM fails in semantic content controls and conjecture that this is because PPLM is designed to control coarse-grained attributes,
-and may not be useful for more targeted tasks such as enforcing that a restaurant review contains a reference to Starbucks. 
+我们观察到 PPLM 在语义内容控制上失败，并推测这是因为 PPLM 被设计用于控制粗粒度属性，
+对于更有针对性的任务可能并不有用，例如强制一条餐馆评论包含对 Starbucks 的提及。
 
 
-FUDGE performs well on semantic content control but does not perform well on the remaining four tasks. Controlling a structured output (\POS and \Syntax) is hard for FUDGE because making one mistake anywhere in the prefix makes the discriminator assign low probabilities to all continuations. In other control tasks that require planning (\Length and \Spans), the future discriminator is difficult to train, as it must implicitly perform lookahead planning. 
+FUDGE 在语义内容控制上表现良好，但在其余四个任务上表现不佳。控制结构化输出（\POS 和 \Syntax）对 FUDGE 来说很难，因为前缀中任意位置的一个错误都会使判别器为所有续写分配低概率。在其他需要规划的控制任务（\Length 和 \Spans）中，future discriminator 难以训练，因为它必须隐式执行前瞻规划。
 
-The non-autoregressive nature of our Diffusion-LM allows it to easily solve all the tasks that require precise future planning (\Spans and \Length). We believe that it works well for complex controls that involve global structures (\POS, \Syntax) because the coarse-to-fine representations allow the classifier to exert control on the entire sequence (near $t=T$) as well as on individual tokens (near $t=0$).
+我们 Diffusion-LM 的非自回归性质使其能够轻松解决所有需要精确未来规划的任务（\Spans 和 \Length）。我们认为，它在涉及全局结构的复杂控制（\POS、\Syntax）上表现良好，是因为从粗到细的表征允许分类器既能对整个序列（接近 $t=T$）施加控制，也能对单个 tokens（接近 $t=0$）施加控制。
 
-\paragraph{Qualitative Results.} 
-\Cref{app:qualitative-syntax} shows samples of \Syntax control. Our method and fine-tuning both provide fluent sentences that mostly satisfy controls, whereas FUDGE deviates from the constraints after the first few words. 
-One key difference between our method and fine-tuning is that Diffusion-LM is able to correct for a failed span and have suffix spans match the target. In the first example, the generated span (``Family friendly Indian food'') is wrong because it contains 1 more word than the target. Fortunately, this error doesn't propagate to later spans, since Diffusion-LM adjusts by dropping the conjunction. Analogously, in the second example, the FT model generates a failed span (``The Mill'') that contains 1 fewer word. However, the FT model fails to adjust in the suffix, leading to many misaligned errors in the suffix. 
+\paragraph{定性结果。}
+\Cref{app:qualitative-syntax} 展示了 \Syntax 控制的样本。我们的方法和微调都给出了大多满足控制的流畅句子，而 FUDGE 在前几个词之后就偏离了约束。
+我们的方法与微调之间的一个关键差异是，Diffusion-LM 能够纠正失败的 span，并使后缀 spans 匹配目标。在第一个例子中，生成的 span（``Family friendly Indian food''）是错误的，因为它比目标多 1 个词。幸运的是，这一错误没有传播到后续 spans，因为 Diffusion-LM 通过丢弃连词进行了调整。类似地，在第二个例子中，FT 模型生成了一个失败的 span（``The Mill''），它少了 1 个词。然而，FT 模型未能在后缀中调整，导致后缀中出现许多错位错误。
 \begin{table*}
     \centering
     \resizebox{0.95\linewidth}{!}{
@@ -417,7 +417,7 @@ Diffusion-LM &  Located on the riverside , \textbf{\corrspan{The Rice Boat}} is 
 FT &  Located near The Sorrento, \errorspan{\textbf{The Mill} is a pub that serves Indian cuisine.} \\
     \bottomrule
     \end{tabular}}
-\caption{\label{app:qualitative-syntax}  Qualitative examples from the \Syntax control. The syntactic parse tree is linearized by nested brackets representing the constituents, and we use the standard PTB syntactic categories. Tokens within each span are represented as * . We color failing spans \errorspan{red} and \textbf{bold} the spans of interest that we discuss in \cref{ssec:control}. }
+\caption{\label{app:qualitative-syntax} \Syntax 控制的定性示例。句法解析树通过表示成分的嵌套括号线性化，并使用标准 PTB 句法类别。每个 span 内的 tokens 表示为 *。我们将失败 spans 标为\errorspan{红色}，并将 \cref{ssec:control} 中讨论的关注 spans 加\textbf{粗}。}
 \end{table*}
 
 
@@ -426,7 +426,7 @@ FT &  Located near The Sorrento, \errorspan{\textbf{The Mill} is a pub that serv
 
 
 
-\subsection{Composition of Controls}
+\subsection{控制组合}
 \label{ssec:compose}
 \begin{table*}
     \centering
@@ -445,25 +445,25 @@ FT-PoE              &  61.7     & 29.2  & \textbf{2.77} &  29.4 & 10.5 & \textbf
 \bottomrule
 \end{tabular}
  }
-\caption{\label{tab:compose} In this experiment, we compose semantic control and syntactic control: Diffusion-LM achieves higher success rate (\success) at some cost of fluency (\fluency). Our method outperforms both FUDGE and FT-PoE (product of experts of two fine-tuned models) on control success rate, especially for the structured syntactic controls (i.e.  syntactic parse tree and POS).
+\caption{\label{tab:compose} 在该实验中，我们组合语义控制和句法控制：Diffusion-LM 以一定流畅性（\fluency）为代价取得更高成功率（\success）。我们的方法在控制成功率上优于 FUDGE 和 FT-PoE（两个微调模型的 product of experts），尤其是在结构化句法控制（即句法解析树和 POS）上。
 }
 \end{table*}
 
 
-One unique capability of plug-and-play controllable generation is its modularity. Given
-classifiers for multiple independent tasks, gradient guided control makes it simple
-to generate from the intersection of multiple controls by taking gradients on the sum of the classifier log-probabilities.
+Plug-and-play 可控生成的一项独特能力是其模块化。给定
+多个独立任务的分类器，梯度引导控制使得通过对分类器 log-probabilities 之和取梯度，
+从多个控制的交集中生成变得简单。
 
 
-We evaluate this setting on the combination of \Content + \Syntax control and \Content + \POS control.
-As shown in \cref{tab:compose}, our Diffusion-LM achieves a high success rate for both of the two components, whereas FUDGE gives up on the more global syntactic control. This is expected because FUDGE fails to control syntax on its own.
+我们在 \Content + \Syntax 控制和 \Content + \POS 控制的组合上评估这一设定。
+如 \cref{tab:compose} 所示，我们的 Diffusion-LM 在两个组成部分上都取得高成功率，而 FUDGE 放弃了更全局的句法控制。这是预期之中的，因为 FUDGE 本身就无法控制句法。
 
-Fine-tuned models are good at POS and semantic content control individually but do not compose these two controls well by product of experts (PoE), leading to a large drop in success rates for both constraints.
+微调模型分别擅长 POS 和语义内容控制，但不能通过 product of experts (PoE) 很好地组合这两种控制，导致两个约束的成功率都大幅下降。
 
 
  
 
-\subsection{Infilling Results}
+\subsection{Infilling 结果}
 \label{ssec:infill}
 
 \begin{table}
@@ -482,16 +482,16 @@ AR & 6.7 & 27.0 & 26.9 & \textbf{89.0}  & $\textbf{0.39}^{+0.02}_{-0.03}$\\
 \bottomrule
 \end{tabular}}
 \vspace{2mm}
-\caption{\label{tab:infill} For sentence infilling, Diffusion-LM significantly outperforms prior work COLD \cite{Qin-COLD} and Delorean  \cite{qin-etal-2020-back} (numbers taken from paper), and matches the performance of an autoregressive LM (AR) trained from scratch to do infilling.   }
+\caption{\label{tab:infill} 对于句子 infilling，Diffusion-LM 显著优于先前工作 COLD \cite{Qin-COLD} 和 Delorean \cite{qin-etal-2020-back}（数值取自论文），并达到从头训练用于 infilling 的自回归 LM（AR）的性能。}
 \end{table}
 
 
 
-As shown in \cref{tab:infill}, our diffusion LM significantly outperforms continuous relaxation based methods for infilling (COLD and DELOREAN). Moreover, our method achieves comparable performance to fine-tuning a specialized model for this task. Our method has slightly better automatic evaluation scores and the human evaluation found no statistically significant improvement for either method. These results suggest that Diffusion LM can solve many types of controllable generation tasks that depend on generation order or lexical constraints (such as infilling) without specialized training.
+如 \cref{tab:infill} 所示，我们的扩散 LM 显著优于基于连续松弛的 infilling 方法（COLD 和 DELOREAN）。此外，我们的方法达到了与为该任务微调专门模型相当的性能。我们的方法具有略好的自动评估分数，而人工评估发现两种方法均没有统计显著的改进。这些结果表明，Diffusion LM 可以在没有专门训练的情况下解决许多依赖生成顺序或词汇约束的可控生成任务（例如 infilling）。
 
 
 
-\subsection{Ablation Studies}
+\subsection{消融研究}
 \label{sec:ablation}
 
 
@@ -502,35 +502,35 @@ As shown in \cref{tab:infill}, our diffusion LM significantly outperforms contin
     \includegraphics[width=0.25\textwidth]{fig/ablation_full1-2.pdf}
     \includegraphics[width=0.25\textwidth]{fig/ablation_full2.pdf}
 \caption{\label{fig:ablation}
-We measure the impact of our proposed design choices through lm-score. We find both learned embeddings and reparametrization substantially improves sample quality.
+我们通过 lm-score 衡量所提出设计选择的影响。我们发现，学到的 embeddings 和重参数化都显著提升了样本质量。
 }
 \end{wrapfigure}
 
 
-We verify the importance of our proposed design choices in \cref{sec:method} through two ablation studies. We measure the sample quality of Diffusion-LM using the lm-score on 500 samples~\cref{ssec:control_gen_setup}.
+我们通过两个消融研究验证 \cref{sec:method} 中所提出设计选择的重要性。我们在 500 个样本上使用 lm-score 衡量 Diffusion-LM 的样本质量~\cref{ssec:control_gen_setup}。
 
-\textbf{Learned v.s. Random Embeddings (\cref{ssec:embeddings}).} 
-Learned embeddings outperform random embeddings on the ROCStories, which is a harder language modeling task. The same trend holds for the E2E dataset but with a smaller margin.
-
-
-\textbf{Objective Parametrization (\cref{ssec:rounding}).}
-We propose to let the diffusion model predict $\cx{0}$ directly. Here, we compare this with standard parametrization in image generation which parametrizes by the noise term $\epsilon$. \cref{fig:ablation} (right) shows that parametrizing by $\cx{0}$ consistently attains good performance across dimensions, whereas parametrizing by $\epsilon$ works fine for small dimensions, but quickly collapses for larger dimensions. 
+\textbf{学习式 vs. 随机 Embeddings（\cref{ssec:embeddings}）。}
+学习式 embeddings 在 ROCStories 上优于随机 embeddings，而 ROCStories 是更难的语言建模任务。E2E 数据集上也有相同趋势，但幅度较小。
 
 
+\textbf{目标参数化（\cref{ssec:rounding}）。}
+我们提出让扩散模型直接预测 $\cx{0}$。这里，我们将其与图像生成中的标准参数化进行比较，后者通过噪声项 $\epsilon$ 参数化。\cref{fig:ablation}（右）显示，通过 $\cx{0}$ 参数化在不同维度上都能稳定取得良好性能，而通过 $\epsilon$ 参数化在小维度时表现尚可，但在较大维度时很快崩溃。
 
 
-\section{Conclusion and Limitations}
-We proposed Diffusion-LM, a novel and controllable language model based on continuous diffusions, which enables new forms of complex fine-grained control tasks.
-We demonstrate Diffusion-LM’s success in 6 fine-grained control tasks: our method almost doubles the control success rate of prior methods and is competitive with  baseline fine-tuning methods that require additional training.
 
-We find the complex controls enabled by Diffusion-LM to be compelling, and we are excited by how Diffusion-LM is a  substantial departure from the current paradigm of discrete autoregressive generation. As with any new technologies, there are drawbacks to the Diffusion-LMs that we constructed: (1) it has higher perplexity; (2) decoding is substantially slower; %
-and (3) training converges more slowly. We believe that with more follow-up work and optimization,  many of these issues can be addressed, and this approach will turn out to be a compelling way to do controllable generation at scale.%
+
+\section{结论与局限性}
+我们提出 Diffusion-LM，这是一种基于连续扩散的新的可控语言模型，支持新的复杂细粒度控制任务形式。
+我们展示了 Diffusion-LM 在 6 个细粒度控制任务上的成功：我们的方法几乎将先前方法的控制成功率翻倍，并且与需要额外训练的微调基线方法具有竞争力。
+
+我们认为 Diffusion-LM 所支持的复杂控制很有吸引力，并且对 Diffusion-LM 显著偏离当前离散自回归生成范式这一点感到兴奋。与任何新技术一样，我们构建的 Diffusion-LM 也存在缺点：(1) 它具有更高的困惑度；(2) 解码明显更慢；%
+以及 (3) 训练收敛更慢。我们相信，通过更多后续工作和优化，许多这些问题可以得到解决，而该方法将成为一种有吸引力的大规模可控生成方式。%
 
 
 
 \begin{ack}
-We thank Yang Song, Jason Eisner, Tianyi Zhang, Rohan Taori, Xuechen Li, Niladri Chatterji, and the members of p-lambda group for early discussions and feedbacks. We gratefully acknowledge the support of a PECASE award. 
-Xiang Lisa Li is supported by a Stanford Graduate Fellowship. 
+我们感谢 Yang Song、Jason Eisner、Tianyi Zhang、Rohan Taori、Xuechen Li、Niladri Chatterji 以及 p-lambda 小组成员在早期讨论和反馈中的帮助。我们衷心感谢 PECASE 奖项的支持。
+Xiang Lisa Li 受 Stanford Graduate Fellowship 支持。
 \end{ack}
 
 
@@ -564,7 +564,7 @@ Xiang Lisa Li is supported by a Stanford Graduate Fellowship.
 
 
 
-\section{Diffusion Noise Schedule}
+\section{扩散噪声调度}
 \newcommand{\sqrtt}{\textit{sqrt}\xspace} 
 \newcommand{\cosine}{\textit{cosine}\xspace}
 \newcommand{\linear}{\textit{linear}\xspace}
@@ -575,34 +575,34 @@ Xiang Lisa Li is supported by a Stanford Graduate Fellowship.
 \vspace{-10pt}
 \includegraphics[width=0.9\linewidth]{fig/noise_schedule_v4.pdf}
 \vspace{-3pt}
-\caption{Visualizing the noise schedule $\sqrt{1-\alphabar_t}$. \label{fig:noise}  }
+\caption{噪声调度 $\sqrt{1-\alphabar_t}$ 的可视化。\label{fig:noise}  }
 \vspace{-10pt}
 \end{wrapfigure}
 
-Because a diffusion model shares parameters for all diffusion steps, the  noise schedule (parametrized by $\alphabar_{1:T}$) is an important hyperparameter that determines how much weight we assign to each denoising problem. 
-We find that standard noise schedules for continuous diffusions are not robust for text data. We hypothesize that the discrete nature of text and the rounding step make the model insensitive to noise near $t= 0$. Concretely, adding small amount of Gaussian noise to a word embedding is unlikely to change its nearest neighbor in the embedding space, making denoising an easy task near $t=0$.
+由于扩散模型在所有扩散步骤上共享参数，噪声调度（由 $\alphabar_{1:T}$ 参数化）是一个重要超参数，它决定了我们为每个去噪问题分配多少权重。
+我们发现，连续扩散的标准噪声调度对文本数据并不鲁棒。我们假设，文本的离散性质和 rounding 步骤使模型对 $t= 0$ 附近的噪声不敏感。具体而言，向词 embedding 添加少量 Gaussian 噪声不太可能改变其在 embedding 空间中的最近邻，因此 $t=0$ 附近的去噪任务较为容易。
 
-To address this, we introduce a new \sqrtt noise schedule that is better suited for text, shown in \cref{fig:noise} defined by
-$\alphabar_t = 1-\sqrt{t/T + s}$, where $s$ is a small constant that corresponds to the starting noise level\footnote{We set $s=$1e-4, and $T=2000$, which sets the initial standard deviation to $0.1$. }. Compared to standard \linear and \cosine schedules, our \sqrtt schedule starts with a higher noise level and increase noise rapidly for the first 50 steps. Then \sqrtt slows down injecting noise to avoid spending much steps in the high-noise problems, which may be too difficult to solve well.
-
-
+为解决这一问题，我们引入一种更适合文本的新 \sqrtt 噪声调度，如 \cref{fig:noise} 所示，其定义为
+$\alphabar_t = 1-\sqrt{t/T + s}$，其中 $s$ 是对应起始噪声水平的小常数\footnote{我们设 $s=$1e-4，$T=2000$，这使初始标准差为 $0.1$。}。与标准 \linear 和 \cosine 调度相比，我们的 \sqrtt 调度从更高噪声水平开始，并在前 50 步快速增加噪声。随后 \sqrtt 放慢注入噪声的速度，以避免在高噪声问题上花费太多步骤，因为这些问题可能过难而无法很好求解。
 
 
 
-\section{Hyperparameters} 
+
+
+\section{超参数} 
 \label{app:hyperparam} 
-\paragraph{Diffusion-LM hyperparameters.}
-The hyperparameters that are specific to Diffusion-LM include the number of diffusion steps, the architecture of the Diffusion-LM, the embedding dimension, and the noise schedule, . We set the diffusion steps to be $2000$, the architecture to be  BERT-base \cite{Devlin2019BERTPO}, and the sequence length to be $64$. 
-For the embedding dimensions, we select from $d \in \{16, 64, 128, 256\}$ and select $d=16$ for the E2E dataset and $d=128$ for ROCStories. 
-For the noise schedule, we design the \sqrtt schedule (\cref{app:noise}) that is more robust to different parametrizations and embedding dimensions as shown in \cref{app:ablation}. However, once we picked the $\cx{0}$-parametrization (\cref{ssec:rounding}) the advantage of \sqrtt schedule is not salient. 
+\paragraph{Diffusion-LM 超参数。}
+Diffusion-LM 特有的超参数包括扩散步骤数、Diffusion-LM 的架构、embedding 维度和噪声调度。我们将扩散步骤设为 $2000$，架构设为 BERT-base \cite{Devlin2019BERTPO}，序列长度设为 $64$。
+对于 embedding 维度，我们从 $d \in \{16, 64, 128, 256\}$ 中选择，并为 E2E 数据集选择 $d=16$，为 ROCStories 选择 $d=128$。
+对于噪声调度，我们设计了 \sqrtt 调度（\cref{app:noise}），如 \cref{app:ablation} 所示，它对不同参数化和 embedding 维度更鲁棒。然而，一旦我们选择 $\cx{0}$-参数化（\cref{ssec:rounding}），\sqrtt 调度的优势就不那么显著。
 
-\paragraph{Training hyperparameters.}
-We train Diffusion-LMs using AdamW optimizer and a linearly decay learning rate starting at 1e-4, dropout of 0.1, batch size of 64, and the total number of training iteration is 200K for E2E dataset, and 800K for ROCStories dataset. Our Diffusion-LMs are trained on a single GPU: NVIDIA RTX A5000, NVIDIA GeForce RTX 3090, or NVIDIA A100. It takes approximately 5 hours to train for 200K iterations on a single A100 GPU.  
+\paragraph{训练超参数。}
+我们使用 AdamW 优化器训练 Diffusion-LM，学习率从 1e-4 开始线性衰减，dropout 为 0.1，batch size 为 64；总训练迭代次数在 E2E 数据集上为 200K，在 ROCStories 数据集上为 800K。我们的 Diffusion-LM 在单个 GPU 上训练：NVIDIA RTX A5000、NVIDIA GeForce RTX 3090 或 NVIDIA A100。在单个 A100 GPU 上训练 200K 次迭代约需 5 小时。
 
-To stablize the training under $\Lvlb^{\text{e2e}}$ objective, we find that we need to set gradient clipping to 1.0 and apply importance sampling to reweight each term in $\Lvlb$ \cite{nichol2021improved}. Both tricks are not necessary for $\Lsimple^{\text{e2e}}$ objective.  
+为稳定 $\Lvlb^{\text{e2e}}$ 目标下的训练，我们发现需要将梯度裁剪设为 1.0，并应用重要性采样对 $\Lvlb$ 中的每一项重新加权 \cite{nichol2021improved}。对于 $\Lsimple^{\text{e2e}}$ 目标，这两个技巧都不是必需的。
 
-\paragraph{Controllable Generation hyperparameters.} To achieve controllable generation, we run gradient update on the continuous latents of Diffusion-LM. 
-We use the AdaGrad optimizer \cite{Duchi2010AdaptiveSM} to update the latent variables, and we tune the learning rate, $\text{lr} \in \{0.05, 0.1, 0.15, 0.2\}$ and the trade-off parameter $\lambda \in \{0.1, 0.01, 0.001, 0.0005\}$. Different plug-and-play controllable generation approaches tradeoff between fluency and control by tunning different hyperparameters: PPLM uses the number of gradient updates per token, denoted as $k$, and we tune $k \in \{10, 30\}$. FUDGE uses the tradeoff parameter $\lambda_{\text{FUDGE}}$ and we tune this $\lambda_{\text{FUDGE}} \in \{16, 8, 4, 2 \}$. \cref{tab:hyper} contains all the selected hyperparameter for each control tasks. Both PPLM and FUDGE has additional hyperparameters and we follow the instruction from the original paper to set those. For PPLM, we set the learning rate to be 0.04 and KL-scale to be 0.01. For FUDGE, we set precondition top-K to be 200, post top-K to be 10. 
+\paragraph{可控生成超参数。} 为实现可控生成，我们在 Diffusion-LM 的连续隐变量上执行梯度更新。
+我们使用 AdaGrad 优化器 \cite{Duchi2010AdaptiveSM} 更新隐变量，并调节学习率 $\text{lr} \in \{0.05, 0.1, 0.15, 0.2\}$ 和权衡参数 $\lambda \in \{0.1, 0.01, 0.001, 0.0005\}$。不同 plug-and-play 可控生成方法通过调节不同超参数来权衡流畅性与控制：PPLM 使用每个 token 的梯度更新次数，记为 $k$，我们调节 $k \in \{10, 30\}$。FUDGE 使用权衡参数 $\lambda_{\text{FUDGE}}$，我们调节 $\lambda_{\text{FUDGE}} \in \{16, 8, 4, 2 \}$。\cref{tab:hyper} 包含每个控制任务所选的全部超参数。PPLM 和 FUDGE 都有额外超参数，我们遵循原论文的说明进行设置。对于 PPLM，我们将学习率设为 0.04，将 KL-scale 设为 0.01。对于 FUDGE，我们将 precondition top-K 设为 200，将 post top-K 设为 10。
 
 \newcommand{\tradeoff}{tradeoff}
 \begin{table*}
@@ -618,103 +618,103 @@ Diffusion-LM & 0.01 & 0.1 & 0.0005 & 0.05 & 0.0005 & 0.2 &  0.1 & 0.15 & 0.01 & 
 \bottomrule
 \end{tabular}
 }
-\caption{\label{tab:hyper} Hyperparameters for controllable generation methods. }
+\caption{\label{tab:hyper} 可控生成方法的超参数。}
 \end{table*}
 
-\section{Decoding Speed}
-Sampling from Diffusion-LMs requires iterating through the 2000 diffusion steps, yielding $O(2000)$ $\xxtheta$ model calls. In contrast, sampling from autoregressive LMs takes $O(n)$ where $n$ is the sequence length. Therefore, decoding Diffusion-LM is slower than decoding autoregressive LMs in short and medium-length sequence regimes. Concretely, it takes around 1 minute to decode 50 sequence of length 64.
+\section{解码速度}
+从 Diffusion-LM 采样需要迭代 2000 个扩散步骤，产生 $O(2000)$ 次 $\xxtheta$ 模型调用。相比之下，从自回归 LM 采样需要 $O(n)$，其中 $n$ 是序列长度。因此，在短序列和中等长度序列场景中，解码 Diffusion-LM 比解码自回归 LM 更慢。具体而言，解码 50 个长度为 64 的序列大约需要 1 分钟。
 
-To speed up decoding, we tried skipping steps in the generative diffusion process and downsample 2000 steps to 200 steps. Concretely, we set $T=200$ and downsample the noise schedule $\alphabar_{t} = \alphabar_{10t}$, which is equivalent to setting each unit transition as the transition $\cx{t} \rightarrow \cx{t+10}$. We decode Diffusion-LM using this new noise schedule and discretization. We find that this naive approach doesn't hurt sample quality for simple language modeling tasks like E2E, but it hurts sample quality for harder language modeling tasks like ROCStories. 
+为加速解码，我们尝试在生成扩散过程中跳过步骤，将 2000 步下采样到 200 步。具体而言，我们设 $T=200$ 并下采样噪声调度 $\alphabar_{t} = \alphabar_{10t}$，这等价于将每个单位转移设为转移 $\cx{t} \rightarrow \cx{t+10}$。我们使用这一新的噪声调度和离散化来解码 Diffusion-LM。我们发现，这种简单的做法不会损害 E2E 等简单语言建模任务的样本质量，但会损害 ROCStories 等更难语言建模任务的样本质量。
 
-For plug-and-play controllable generation tasks, extant approaches are even slower. 
-PPLM takes around 80 minutes to generate 50 samples (without batching), because it needs to run 30 gradient updates for each token. 
-FUDGE takes 50 seconds to generate 50 samples (with batching), because it needs to call the lightweight classifier for each partial sequence, requiring 200 classifier calls for each token, yielding $100 \times$ sequence length calls. We can batch the classifier calls, but it sometimes limits batching across samples due to limited GPU memory. 
-Our Diffusion-LM takes around 80 seconds to generate 50 samples (with batching). Our method downsamples the number of diffusion steps to 200, and it takes 3 classifier calls per diffusion step, yielding 600 model calls in total. 
+对于 plug-and-play 可控生成任务，现有方法甚至更慢。
+PPLM 生成 50 个样本大约需要 80 分钟（不使用 batching），因为它需要对每个 token 执行 30 次梯度更新。
+FUDGE 生成 50 个样本需要 50 秒（使用 batching），因为它需要为每个部分序列调用轻量分类器，每个 token 需要 200 次分类器调用，产生 $100 \times$ 序列长度次调用。我们可以批处理分类器调用，但由于 GPU 内存有限，这有时会限制跨样本 batching。
+我们的 Diffusion-LM 生成 50 个样本大约需要 80 秒（使用 batching）。我们的方法将扩散步骤数下采样到 200，并且每个扩散步骤需要 3 次分类器调用，总共 600 次模型调用。
 
-\section{Classifiers for Classifier-Guided Controls}
-\textbf{Semantic Content.} We train an autoregressive LM (GPT-2 small architecture) to predict the (field, value) pair conditioned on text. To parametrize $\log p(\cc \mid \cx{t})$, we compute the logprob of ``value'' per token.  
-
-
-\textbf{Parts-of-speech.} The classifier is parametrized by a parts-of-speech tagger, which estimates the probability of the target POS sequence conditioned on the latent variables. This tagger uses a BERT-base architecture: the input is the concantenated word embedding, and output a softmax distribution over all POS tags for each input word. $\log p(\cc \mid  \cx{t})$ is the sum of POS log-probs for each word in the sequence.  
-
-\textbf{Syntax Tree.}  We train a Transformer-based constituency parser \cite{kitaev-klein-2018-constituency}. Our parser makes locally normalized prediction for each span, predicting either ``not a constituent'', or a label for the constituent (e.g., Noun Phrase). 
-$\log p(\cc \mid  \cx{t})$ is the sum of log-probs for each labeled and non-constituency span in the sequence. 
+\section{分类器引导控制的分类器}
+\textbf{Semantic Content.} 我们训练一个自回归 LM（GPT-2 small 架构），在文本条件下预测 (field, value) 对。为参数化 $\log p(\cc \mid \cx{t})$，我们计算每个 token 上 ``value'' 的 logprob。
 
 
-\textbf{Syntax Span.} We use the same parser trained for the syntax tree. $\log p(\cc \mid  \cx{t})$ is the log-probability that the target span is annotated with the target label.  
+\textbf{Parts-of-speech.} 该分类器由 parts-of-speech 标注器参数化，它估计在隐变量条件下目标 POS 序列的概率。该标注器使用 BERT-base 架构：输入是拼接的词 embedding，输出是每个输入词在所有 POS 标签上的 softmax 分布。$\log p(\cc \mid  \cx{t})$ 是序列中每个词的 POS log-probs 之和。
 
-\section{End-to-end Objective Derivations}
+\textbf{Syntax Tree.} 我们训练一个基于 Transformer 的 constituency parser \cite{kitaev-klein-2018-constituency}。我们的解析器对每个 span 作局部归一化预测，预测 ``not a constituent'' 或该成分的标签（例如 Noun Phrase）。
+$\log p(\cc \mid  \cx{t})$ 是序列中每个带标签 span 和非成分 span 的 log-probs 之和。
+
+
+\textbf{Syntax Span.} 我们使用为 syntax tree 训练的同一解析器。$\log p(\cc \mid  \cx{t})$ 是目标 span 被标注为目标标签的 log-probability。
+
+\section{端到端目标推导}
 \label{app:derive}
-For continuous diffusion models (\cref{ssec:diffusion_setup}), $\Lsimple$ is derived from the canonical objective $\Lvlb$ by reweighting each term. 
-The first $T$ terms in $\Lvlb$ are all KL divergence between two Gaussian distributions, which has a closed form solution. Take the $t$-th term for example:
+对于连续扩散模型（\cref{ssec:diffusion_setup}），$\Lsimple$ 通过对典型目标 $\Lvlb$ 的每一项重新加权而推导得到。
+$\Lvlb$ 中的前 $T$ 项都是两个 Gaussian 分布之间的 KL divergence，具有闭式解。以第 $t$ 项为例：
 \begin{equation}
 \mathop{\mathbb{E}}_{q(\cx{1:T} | \cx{0})} \left[ \log \frac{q(\cx{t-1} | \cx{0},\cx{t})} {\ptheta(\cx{t-1} | \cx{t}) }\right] = \mathop{\mathbb{E}}_{ q(\cx{1:T} | \cx{0})}  \left[ \frac{1}{2\sigma_t^2}  || \mu_\theta(\cx{t}, t) - \hat{\mu}(\cx{t}, \cx{0}) ||^2\right] + C, 
 \label{app:eqn:simple}
 \end{equation}
-where $C$ is a constant, $\hat{\mu}$ is the mean of the posterior  $q(\cx{t-1} | \cx{0},\cx{t})$, and $\mu_\theta$ is the mean of $\ptheta(\cx{t-1} \mid \cx{t})$ predicted by the diffusion model. Intuitively, this simplification matches the predicted mean of $\cx{t-1}$ to its true posterior mean. The simplification involves removing the constant $C$ and the scaling factor $\frac{1}{2\sigma_t^2}$, yielding one term in $\Lsimple$:  $\mathop{\mathbb{E}}_{ q(\cx{1:T} | \cx{0})}  \left[  || \mu_\theta(\cx{t}, t) - \hat{\mu}(\cx{t}, \cx{0}) ||^2\right]$. 
+其中 $C$ 是常数，$\hat{\mu}$ 是后验 $q(\cx{t-1} | \cx{0},\cx{t})$ 的均值，$\mu_\theta$ 是扩散模型预测的 $\ptheta(\cx{t-1} \mid \cx{t})$ 的均值。直观上，这一简化将 $\cx{t-1}$ 的预测均值与其真实后验均值匹配。该简化移除了常数 $C$ 和缩放因子 $\frac{1}{2\sigma_t^2}$，得到 $\Lsimple$ 中的一项：$\mathop{\mathbb{E}}_{ q(\cx{1:T} | \cx{0})}  \left[  || \mu_\theta(\cx{t}, t) - \hat{\mu}(\cx{t}, \cx{0}) ||^2\right]$。
 
-To apply continuous diffusion to model discrete text, we design Diffusion-LM (\cref{ssec:embeddings}) and propose a new end-to-end training objective (\cref{obj:e2e}) that learns the diffusion model and the embedding parameters jointly. The $\Lvlb^{\text{e2e}}$ can be written out as 
+为应用连续扩散来建模离散文本，我们设计 Diffusion-LM（\cref{ssec:embeddings}），并提出新的端到端训练目标（\cref{obj:e2e}），以联合学习扩散模型和 embedding 参数。$\Lvlb^{\text{e2e}}$ 可写为
 \begin{align*}
     \mathcal{L}^\text{e2e}_{\text{vlb}} (\ww) &= \mathop{\mathbb{E}}_{q_\phi(\cx{0} | \ww)}\left[\mathcal{L}_{\text{vlb}} (\cx{0}) + \log \qphi(\cx{0} | \ww) - \log \ptheta(\ww | \cx{0})]\right] \\
     &= \mathop{\mathbb{E}}_{q_\phi(\cx{0:T} | \ww)}  \left[\underbrace{\log \frac{q(\cx{T} | \cx{0})}{\ptheta(\cx{T})}}_{L_T} + \sum_{t=2}^T \underbrace{\log \frac{q(\cx{t-1} | \cx{0},\cx{t})} {\ptheta(\cx{t-1} | \cx{t}) }}_{L_{t-1}} - \underbrace{\frac{\log \qphi(\cx{0} | \ww)}{\log \ptheta( \cx{0} | \cx{1})}}_{L_{0}}     - \underbrace{\log \ptheta(\ww | \cx{0})}_{L_\text{round}}\right]  \\
 \end{align*}
-We apply the same simplification which transforms $\Lvlb \rightarrow \Lsimple$ to transform  $\mathcal{L}^\text{e2e}_{\text{vlb}} \rightarrow \Lsimpleee$: 
+我们应用将 $\Lvlb \rightarrow \Lsimple$ 的同一简化，将 $\mathcal{L}^\text{e2e}_{\text{vlb}} \rightarrow \Lsimpleee$：
 \begin{align*}
     \mathop{\mathbb{E}}_{q_\phi(\cx{0:T} | \ww)} [L_T] & \rightarrow \mathbb{E}[||\mathop{\mathbb{E}}_{\cx{T}\sim q}[\cx{T}| \cx{0}] - 0 ||^2] = \mathbb{E}[||\hat{\mu}(\cx{T}; \cx{0})] ||^2] \\
     \mathop{\mathbb{E}}_{q_\phi(\cx{0:T} | \ww)} [L_{t-1}] & \rightarrow \mathbb{E}[|| \mathop{\mathbb{E}}_{\cx{t-1}\sim q}[\cx{t-1}| \cx{0}, \cx{t}] - \mathop{\mathbb{E}}_{\cx{t-1} \sim \ptheta}  [\cx{t-1} | \cx{t}] ||^2] =\mathbb{E}[ ||\hat{\mu}(\cx{t}, \cx{0})-\mu_\theta(\cx{t}, t) ||^2]\\
     \mathop{\mathbb{E}}_{q_\phi(\cx{0:T} | \ww)} [L_{0}] & \rightarrow \mathbb{E}[|| \mathop{\mathbb{E}}_{\cx{0}\sim\qphi} [\cx{0} \mid \ww] - \mathop{\mathbb{E}}_{\cx{0} \sim \ptheta} [\cx{0}  \mid \cx{1} ] ||^2] = \mathbb{E}[ ||\Emb(w)-\mu_\theta(\cx{1}, 1) ||^2]
 \end{align*}
 
-It's worth noting that the first term is constant if the noise schedule satisfies $\alphabar_T = 0$, which guarantees $\cx{T}$ is pure Gaussian noise. 
-In contrast, if the noise schedule doesn't go all the way such that $\cx{T}$ is pure Gaussian noise, we need to include this regularization term to prevent the embedding from learning too large norms. Embedding with large norms is a degenerate solution, because it is impossible to  sample from $p(\cx{T})$ accurately, even though it makes all the other denoising transitions easily predictable. 
+值得注意的是，如果噪声调度满足 $\alphabar_T = 0$，从而保证 $\cx{T}$ 是纯 Gaussian 噪声，则第一项是常数。
+相反，如果噪声调度没有一直进行到使 $\cx{T}$ 成为纯 Gaussian 噪声，我们需要包含该正则项，以防止 embedding 学到过大的范数。具有大范数的 embedding 是一种退化解，因为即便它使所有其他去噪转移都容易预测，也不可能准确地从 $p(\cx{T})$ 采样。
 
-Combining these terms yield $\Lsimpleee$. 
+组合这些项得到 $\Lsimpleee$。
 \begin{align*}
     \mathcal{L}^\text{e2e}_\text{simple} (\ww) & =  \mathop{\mathbb{E}}_{\qphi(\cx{0:T} | \ww)}  \left[||\hat{\mu}(\cx{T}; \cx{0})||^2 + \sum_{t=2}^T [||\hat{\mu}(\cx{t}, \cx{0})-\mu_\theta(\cx{t}, t) ||^2] \right] \\
 & ~~~~~~~~~~~ + \mathop{\mathbb{E}}_{\qphi(\cx{0:1} | \ww)} \left[|| \Emb(\ww) - \mu_\theta(\cx{1}, 1) ||^2  - \log \ptheta(\ww | \cx{0})\right].
 \end{align*}
 
-Intuitively, we learn a Transformer model that that takes as input $(\cx{t}, t) \in (\mathbb{R}^{nd}, \mathbb{R})$ and the goal is to predict the distribution of $\cx{t-1} \in \mathbb{R}^{nd}$. It's worth noting that this Transformer model is shared across all the diffusion steps $t = 1\dots T$. As we demonstrated in the derivation of $\Lsimpleee$,  the most natural thing is to directly parametrize the neural network to predict the mean of $\cx{t-1} \mid \cx{t}$, we call this  $\mu_\theta$-parametrization. 
+直观上，我们学习一个 Transformer 模型，它以 $(\cx{t}, t) \in (\mathbb{R}^{nd}, \mathbb{R})$ 为输入，目标是预测 $\cx{t-1} \in \mathbb{R}^{nd}$ 的分布。值得注意的是，该 Transformer 模型在所有扩散步骤 $t = 1\dots T$ 上共享。如我们在 $\Lsimpleee$ 推导中所示，最自然的做法是直接参数化神经网络以预测 $\cx{t-1} \mid \cx{t}$ 的均值，我们称之为 $\mu_\theta$-参数化。
 
-There are other parametrizations that are equivalent to $\mu_\theta$-parametrization up to a scaling constant. For example in \cref{ssec:rounding}, we can train the Transformer model to directly predict $\cx{0}$ via $\xxtheta(\cx{t}, t)$, and use the tractable Gaussian posterior $q(\cx{t-1} \mid \cx{0}, \cx{t})$ to compute the mean of $\cx{t-1}$, which has a closed form solution, conditioned on predicted $\cx{0}$ and observed $\cx{t}$: $ \frac{\sqrt{\alphabar_{t-1}} \beta_t}{1-\alphabar_t}\cx{0} + \frac{\sqrt{\alpha_t} (1-\alphabar_{t-1})}{1-\alphabar_t} \cx{t}$.
+还存在其他参数化，它们与 $\mu_\theta$-参数化仅相差一个缩放常数。例如在 \cref{ssec:rounding} 中，我们可以训练 Transformer 模型通过 $\xxtheta(\cx{t}, t)$ 直接预测 $\cx{0}$，并使用易处理的 Gaussian 后验 $q(\cx{t-1} \mid \cx{0}, \cx{t})$ 计算 $\cx{t-1}$ 的均值；在预测的 $\cx{0}$ 和观测到的 $\cx{t}$ 条件下，该均值具有闭式解：$ \frac{\sqrt{\alphabar_{t-1}} \beta_t}{1-\alphabar_t}\cx{0} + \frac{\sqrt{\alpha_t} (1-\alphabar_{t-1})}{1-\alphabar_t} \cx{t}$。
 \begin{align*}
 & ||\hat{\mu}(\cx{t}, \cx{0})-\mu_\theta(\cx{t}, t) ||^2 \\
 = &  ||(\frac{\sqrt{\alphabar_{t-1}} \beta_t}{1-\alphabar_t}\cx{0} + \frac{\sqrt{\alpha_t} (1-\alphabar_{t-1})}{1-\alphabar_t} \cx{t}) - (\frac{\sqrt{\alphabar_{t-1}} \beta_t}{1-\alphabar_t}\xxtheta(\cx{t}, t) + \frac{\sqrt{\alpha_t} (1-\alphabar_{t-1})}{1-\alphabar_t} \cx{t})||^2\\
 = & ||\frac{\sqrt{\alphabar_{t-1}} \beta_t}{1-\alphabar_t}(\cx{0} - \xxtheta(\cx{t}, t))||^2\\
 \propto &  ||\cx{0} - \xxtheta(\cx{t}, t)||^2
 \end{align*}
-These two parametrizations differ by a constant scaling, and we apply the $\cx{0}$-parametrization to all terms in  $\Lsimpleee$ to reduce rounding errors as discussed in \cref{ssec:rounding}: 
+这两种参数化仅相差常数缩放，并且如 \cref{ssec:rounding} 所讨论，为减少 rounding 错误，我们将 $\cx{0}$-参数化应用于 $\Lsimpleee$ 中的所有项：
 \begin{align*}
     \mathcal{L}^\text{e2e}_{\cx{0}\text{-simple}} (\ww) & =  \mathop{\mathbb{E}}_{\qphi(\cx{0:T} | \ww)}  \left[||\hat{\mu}(\cx{T}; \cx{0})||^2 + \sum_{t=2}^T [||\cx{0}-\xxtheta(\cx{t}, t) ||^2] \right] \\
 & ~~~~~~~~~~~ + \mathop{\mathbb{E}}_{\qphi(\cx{0:1} | \ww)} \left[|| \Emb(\ww) - \xxtheta(\cx{1}, 1) ||^2  - \log \ptheta(\ww | \cx{0})\right].
 \end{align*}
 
-To generate samples from a Diffusion-LM with $\cx{0}$-parametrization,  at each diffusion step, the model estimates the $\cx{0}$ via $\xxtheta (\cx{t}, t)$ and then we sample $\cx{t-1}$ from $q(\cx{t-1} \mid \xxtheta (\cx{t}, t), \cx{t})$, which is fed as input to the next diffusion step.  
+为从具有 $\cx{0}$-参数化的 Diffusion-LM 生成样本，在每个扩散步骤，模型通过 $\xxtheta (\cx{t}, t)$ 估计 $\cx{0}$，随后我们从 $q(\cx{t-1} \mid \xxtheta (\cx{t}, t), \cx{t})$ 采样 $\cx{t-1}$，并将其作为下一扩散步骤的输入。
 
 
 
 
 
 
-\section{Log-Likelihood Models and Results}
+\section{对数似然模型与结果}
 \label{app:simplex}
 
-To investigate Diffusion-LM's log-likelihood performance, we make several departures from the training procedure of \cref{sec:method}.
-Ultimately the log-likelihood improvements described in this section did not translate into better generation quality in our experiments and therefore we focus on the original method in the rest of the paper.
-Our likelihood models are trained as follows:
+为研究 Diffusion-LM 的对数似然性能，我们对 \cref{sec:method} 的训练过程做出若干改变。
+最终，本节描述的对数似然改进在我们的实验中没有转化为更好的生成质量，因此本文其余部分聚焦于原始方法。
+我们的似然模型训练如下：
 \begin{itemize}
-    \item Instead of training a diffusion model on sequences of low-dimensional token embeddings, we train a model directly sequences of on one-hot token vectors.
-    \item Following the setup of \citet{kingma2021variational}, we train a continuous-time diffusion model against the log-likelihood bound and learn the noise schedule simultaneously with the rest of the model to minimize the loss variance.
-    \item Because our model predicts sequences of one-hot vectors, we use a softmax nonlinearity at its output and replace all squared-error terms in the loss function with cross-entropy terms. This choice of surrogate loss led to better optimization, even though we evaluate against the original loss with squared-error terms.
-    \item The model applies the following transformation to its inputs before any Transformer layers: $x := \mathrm{softmax}(\alpha(t) x + \beta(t))$ where $\alpha(t) \in \mathbb{R}$ and $\beta(t) \in \mathbb{R}^v$ are learned functions of the diffusion timestep $t$ parameterized by MLPs ($v$ is the vocabulary size).
-    \item At inference time, we omit the rounding procedure in \cref{ssec:rounding}.
+    \item 我们不是在低维 token embeddings 序列上训练扩散模型，而是直接在 one-hot token 向量序列上训练模型。
+    \item 遵循 \citet{kingma2021variational} 的设置，我们针对对数似然界训练连续时间扩散模型，并与模型其余部分同时学习噪声调度，以最小化损失方差。
+    \item 由于我们的模型预测 one-hot 向量序列，我们在其输出处使用 softmax 非线性，并将损失函数中的所有平方误差项替换为 cross-entropy 项。尽管我们仍用带平方误差项的原始损失进行评估，但这种替代损失选择带来了更好的优化。
+    \item 在任何 Transformer 层之前，模型对输入应用如下变换：$x := \mathrm{softmax}(\alpha(t) x + \beta(t))$，其中 $\alpha(t) \in \mathbb{R}$ 和 $\beta(t) \in \mathbb{R}^v$ 是由 MLP 参数化的扩散时间步 $t$ 的学习函数（$v$ 是词表大小）。
+    \item 在推理时，我们省略 \cref{ssec:rounding} 中的 rounding 过程。
 \end{itemize}
-For exact model architecture and training hyperparameter details, please refer to our released code.
+关于精确的模型架构和训练超参数细节，请参见我们发布的代码。
 
-We train these diffusion models, as well as baseline autoregressive Transformers, on E2E and ROCStories and report log-likelihoods in \cref{tab:ppl}.
-We train two sizes of Transformers: ``small'' models with roughly 100M parameters and ``medium'' models with roughly 300M parameters.
-Both E2E and ROCstories are small enough datasets that all of our models reach their minimum test loss early in training (and overfit after that).
-To additionally compare model performance in a large-dataset regime, we also present ``ROCStories (+GPT-J)'' experiments in which we generate 8M examples of synthetic ROCStories training data by finetuning GPT-J \citep{gpt-j} on the original ROCStories data, pretrain our models on the synthetic dataset, and then finetune and evaluate them on the original ROCStories data.
+我们在 E2E 和 ROCStories 上训练这些扩散模型以及基线自回归 Transformers，并在 \cref{tab:ppl} 中报告对数似然。
+我们训练两种规模的 Transformers：约 100M 参数的 ``small'' 模型和约 300M 参数的 ``medium'' 模型。
+E2E 和 ROCstories 都是足够小的数据集，因此我们的所有模型都在训练早期达到最小测试损失（随后过拟合）。
+为进一步比较大数据集场景下的模型性能，我们还给出 ``ROCStories (+GPT-J)'' 实验：通过在原始 ROCStories 数据上微调 GPT-J \citep{gpt-j}，生成 8M 个合成 ROCStories 训练数据示例，先在合成数据集上预训练模型，然后在原始 ROCStories 数据上微调并评估。
 
 \begin{table*}
     \centering
@@ -727,31 +727,31 @@ To additionally compare model performance in a large-dataset regime, we also pre
 
 \bottomrule
 \end{tabular}
-\caption{\label{tab:ppl} Log-likelihood results (nats per token)}
+\caption{\label{tab:ppl} 对数似然结果（nats per token）}
 \end{table*}
 
-\section{Qualitative Examples}
+\section{定性示例}
 \label{app:qualitative}
 
-We show randomly sampled outputs of Diffusion-LM  both for unconditional generation and for the $5$ control tasks. \cref{app:qualitative-unc} shows the unconditional generation results.
-\cref{app:qualitative-span}, \cref{app:qualitative-pos}, \cref{app:qualitative-content}, and \cref{app:qualitative-syntax} show the qualitative samples from span control, POS control, semantic content control, and syntax tree control, respectively.
-\cref{app:qualitative-length} shows the results of length control. 
+我们展示 Diffusion-LM 在无条件生成和 $5$ 个控制任务上的随机采样输出。\cref{app:qualitative-unc} 展示无条件生成结果。
+\cref{app:qualitative-span}, \cref{app:qualitative-pos}, \cref{app:qualitative-content} 和 \cref{app:qualitative-syntax} 分别展示 span 控制、POS 控制、语义内容控制和 syntax tree 控制的定性样本。
+\cref{app:qualitative-length} 展示长度控制结果。
 
 
-\section{Additional Ablation Studies}
+\section{附加消融研究}
 \label{app:ablation}
-In addition to the 2 ablation studies in \cref{sec:ablation}, we provide more ablation results in \cref{app:tab:ablation} about architecture choices and noise schedule. 
+除了 \cref{sec:ablation} 中的 2 个消融研究外，我们在 \cref{app:tab:ablation} 中提供关于架构选择和噪声调度的更多消融结果。
 
-\textbf{Learned v.s. Random Embeddings (\cref{ssec:embeddings}).} 
-Learned embeddings outperform random embeddings on both ROCStories and the E2E dataset by xx percent and xx percent respectively, as shown in the first row of \cref{app:tab:ablation}. 
+\textbf{学习式 vs. 随机 Embeddings（\cref{ssec:embeddings}）。}
+如 \cref{app:tab:ablation} 第一行所示，学习式 embeddings 在 ROCStories 和 E2E 数据集上分别比随机 embeddings 高 xx percent 和 xx percent。
 
 
-\textbf{Noise Schedule (\cref{app:noise}).}
-We compare the \sqrtt schedule with \cosine \cite{nichol2021improved} and \linear \cite{ho2020denoising} schedules proposed for image modeling. The middle row of  \cref{app:tab:ablation} demonstrates that \sqrtt schedule attains consistently good and stable performance across all dimension and parametrization choices. While the \sqrtt schedule is less important with $\cx{0}$-parametrization, we see that it provides a substantially more robust noise schedule under alternative parametrizations such as $\epsilon$.
+\textbf{噪声调度（\cref{app:noise}）。}
+我们将 \sqrtt 调度与为图像建模提出的 \cosine \cite{nichol2021improved} 和 \linear \cite{ho2020denoising} 调度进行比较。\cref{app:tab:ablation} 中间一行表明，\sqrtt 调度在所有维度和参数化选择上都取得一致良好且稳定的性能。虽然在 $\cx{0}$-参数化下 \sqrtt 调度不那么重要，但我们看到它在 $\epsilon$ 等替代参数化下提供了显著更鲁棒的噪声调度。
 
-\paragraph{Transformer v.s. U-Net.}
-The U-Net architecture in \citet{ho2020denoising} utilizes 2D-convolutional layers, and we imitate all the model architectures except changing 2D-conv to 1D-conv which is suitable for text data. 
-\cref{app:tab:ablation} (last row) shows that the Transformer architecture outperforms U-Net.
+\paragraph{Transformer vs. U-Net。}
+\citet{ho2020denoising} 中的 U-Net 架构使用 2D-convolutional layers，我们模仿所有模型架构，但将 2D-conv 改为适合文本数据的 1D-conv。
+\cref{app:tab:ablation}（最后一行）显示 Transformer 架构优于 U-Net。
 
 \begin{figure}
 
@@ -760,16 +760,16 @@ The U-Net architecture in \citet{ho2020denoising} utilizes 2D-convolutional laye
     \includegraphics[width=0.8\textwidth]{fig/ablation_emb_e2e_appendix.pdf}
     \includegraphics[width=0.8\textwidth]{fig/ablation_parametrization_appendix.pdf}
     \includegraphics[width=0.4\textwidth]{fig/ablation_architecture_appendix.pdf}
-\caption{\label{app:tab:ablation} Additional ablation results. The first row shows Diffusion-LM with trainable embeddings outperform random embeddings on both datasets (\cref{ssec:embeddings}). The second row demonstrates that \sqrtt schedule attains consistently good and stable performance across all dimension and parametrization choices. The last row shows that Transformer architecture outperforms U-Net architecture for language modeling. 
+\caption{\label{app:tab:ablation} 附加消融结果。第一行显示，带有可训练 embeddings 的 Diffusion-LM 在两个数据集上都优于随机 embeddings（\cref{ssec:embeddings}）。第二行表明，\sqrtt 调度在所有维度和参数化选择上都取得一致良好且稳定的性能。最后一行显示，对于语言建模，Transformer 架构优于 U-Net 架构。
 }
 \end{figure}
 
 
-\section{Societal Impacts}
-On the one hand, having strong controllability in language models will help with mitigating toxicity, making the language models more reliable to deploy. Additionally, we can also control the model to be more truthful, reducing the inaccurate information generated by the language model by carefully controlling it to be truthful.   
-On the other hand, however, one could also imagine more powerful targeted disinformation (e.g., narrative wedging) derived from the fine-grained controllability.  
+\section{社会影响}
+一方面，语言模型具备强可控性将有助于缓解毒性，使语言模型的部署更加可靠。此外，我们还可以控制模型更加真实，通过仔细控制其真实性来减少语言模型生成的不准确信息。
+然而另一方面，也可以想象，细粒度可控性可能带来更强大的定向虚假信息（例如 narrative wedging）。
 
-Towards this end, it might be worth considering generation methods that can watermark the generated outputs without affecting its fluency, and this type of watermark could also be framed as a  controllable generation problem, with distinguish-ability and fluency as the constraints. 
+为此，值得考虑能够在不影响生成输出流畅性的情况下为其添加水印的生成方法；这类水印也可以被表述为可控生成问题，其中可区分性和流畅性作为约束。
 
 \FloatBarrier
 
@@ -800,7 +800,7 @@ Towards this end, it might be worth considering generation methods that can wate
 & The Mill is a coffee shop based in the city centre area near to The Sorrento . It is in the high price range and serves Indian food . \\
 \bottomrule
     \end{tabular}}
-\caption{\label{app:qualitative-unc} Randomly sampled examples generated by unconditional sampling Diffusion-LM trained on 3 datasets. ROCStories+Aug denotes ROCStories with data augmentation. It's generated by first fine-tuning GPT-j on the ROCStories dataset and then sample the large GPT-j model to generate 1M stories. } 
+\caption{\label{app:qualitative-unc} 由在 3 个数据集上训练的 Diffusion-LM 通过无条件采样生成的随机示例。ROCStories+Aug 表示带数据增强的 ROCStories。它通过先在 ROCStories 数据集上微调 GPT-j，再采样大型 GPT-j 模型生成 1M 个故事而得到。}
 \end{table*}
 
 
@@ -847,7 +847,7 @@ FT &  Strada is a restaurant which costs less than £ 20 , but \errorspan{is not
  
 \bottomrule
 \end{tabular}}
-\caption{\label{app:qualitative-span}  Qualitative output of the syntax span control tasks. The target span ($i,j,$label) means the span from position $i$ to position $j$ should be a constituent with a specific label: S is sentence, NP is noun phrase, VP is verb phrase, PP is prepositional phrase, etc.  We color \errorspan{failed spans red} and \greenspan{correct spans green}. }
+\caption{\label{app:qualitative-span} syntax span 控制任务的定性输出。目标 span（$i,j,$label）表示从位置 $i$ 到位置 $j$ 的 span 应是具有特定标签的成分：S 是 sentence，NP 是 noun phrase，VP 是 verb phrase，PP 是 prepositional phrase，等等。我们将\errorspan{失败 spans 标为红色}，将\greenspan{正确 spans 标为绿色}。}
 \end{table*}
 
 
@@ -922,7 +922,7 @@ FT &  The Vaults is a one star coffee shop located near the Café Brazil.
 
 \bottomrule
 \end{tabular}}
-\caption{\label{app:qualitative-pos}  Qualitative output of the POS control tasks. The target POS is the sequence of gold parts-of-speech tags the generated texts should match.  }
+\caption{\label{app:qualitative-pos} POS 控制任务的定性输出。目标 POS 是生成文本应匹配的 gold parts-of-speech 标签序列。}
 \end{table*}
 
 
@@ -978,7 +978,7 @@ FT &  For a family friendly coffee shop that serves Italian food, with a custome
 \\
 \bottomrule
 \end{tabular}}
-\caption{\label{app:qualitative-length}  Qualitative output of the length control tasks, where all the generated texts tried to exactly match the target length. We mark the words exceeding the target length \errorspan{red}. }
+\caption{\label{app:qualitative-length} 长度控制任务的定性输出，其中所有生成文本都试图精确匹配目标长度。我们将超过目标长度的词标为\errorspan{红色}。}
 \end{table*}
 
 
@@ -1037,7 +1037,7 @@ Diffusion-LM &   The Punter is a French restaurant with a \greenspan{high price}
 FT &  A fast food coffee shop that is not kid friendly is called Cocum. It is \greenspan{expensive} and gets average ratings. 
 \\
 \end{tabular}}
-\caption{\label{app:qualitative-content}  Qualitative output of the semantic content control task. We mark the compliant spans as green, and the spans that violates the control target as red. }
+\caption{\label{app:qualitative-content} 语义内容控制任务的定性输出。我们将符合要求的 spans 标为绿色，将违反控制目标的 spans 标为红色。}
 \end{table*}
 
 
