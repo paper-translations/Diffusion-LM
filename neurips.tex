@@ -4,7 +4,7 @@
 \PassOptionsToPackage{numbers, compress}{natbib}
 
 
-\usepackage[preprint]{neurips_2022}
+\usepackage[final]{neurips_2022}
 
 
 
@@ -71,6 +71,8 @@
 \setmonofont[AutoFakeBold=1.2]{LMMono10}
 \setstretch{1.2}
 \captionsetup{font={small,it,stretch=1.2}}
+\let\oldfootnotesize\footnotesize
+\renewcommand{\footnotesize}{\oldfootnotesize\itshape}
 
 \renewcommand{\UrlFont}{\ttfamily\small}
 
